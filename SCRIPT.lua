@@ -55,28 +55,77 @@ local flingQueue = {}
 local activeAuras = {}
 local walkFlingEnabled = false
 local statusGui = nil
-local strongWalkFling = false
+local flingPart = nil
+local bodyVel = nil
+local bodyGyro = nil
 
-local function enableWalkFling(strong)
+local function enableWalkFling()
+	if walkFlingEnabled then return end
 	walkFlingEnabled = true
-	strongWalkFling = strong or false
+	
+	if not character or not rootPart then return end
+	
+	for _, v in pairs(character:GetDescendants()) do
+		if v:IsA("BasePart") then
+			v.CanCollide = false
+		end
+	end
+	
+	flingPart = Instance.new("Part")
+	flingPart.Size = Vector3.new(5, 1, 5)
+	flingPart.Transparency = 1
+	flingPart.CanCollide = true
+	flingPart.Anchored = false
+	flingPart.Parent = workspace
+	
+	bodyVel = Instance.new("BodyVelocity")
+	bodyVel.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+	bodyVel.Velocity = Vector3.new(0, 0, 0)
+	bodyVel.Parent = flingPart
+	
+	bodyGyro = Instance.new("BodyGyro")
+	bodyGyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+	bodyGyro.P = 10000
+	bodyGyro.Parent = flingPart
 end
 
 local function disableWalkFling()
+	if not walkFlingEnabled then return end
 	walkFlingEnabled = false
-	strongWalkFling = false
+	
+	if flingPart and flingPart.Parent then
+		flingPart:Destroy()
+	end
+	if bodyVel and bodyVel.Parent then
+		bodyVel:Destroy()
+	end
+	if bodyGyro and bodyGyro.Parent then
+		bodyGyro:Destroy()
+	end
+	
+	flingPart = nil
+	bodyVel = nil
+	bodyGyro = nil
+	
+	if character then
+		for _, v in pairs(character:GetDescendants()) do
+			if v:IsA("BasePart") then
+				v.CanCollide = true
+			end
+		end
+	end
 end
 
 local walkFlingConnection
 walkFlingConnection = RunService.Heartbeat:Connect(function()
-	if not character or not character.Parent or not rootPart or not rootPart.Parent or not humanoid then
-		return
-	end
-	
-	if walkFlingEnabled and strongWalkFling then
-		rootPart.CFrame = rootPart.CFrame + humanoid.MoveVector * 0.5
-		rootPart.RotVelocity = Vector3.new(9e9, 9e9, 9e9)
-		rootPart.Velocity = Vector3.new(0, 0, 0)
+	if walkFlingEnabled and flingPart and flingPart.Parent and rootPart and rootPart.Parent then
+		flingPart.CFrame = rootPart.CFrame * CFrame.new(0, -3, 0)
+		if bodyGyro and bodyGyro.Parent then
+			bodyGyro.CFrame = rootPart.CFrame
+		end
+		if bodyVel and bodyVel.Parent then
+			bodyVel.Velocity = rootPart.Velocity
+		end
 	end
 end)
 
@@ -151,10 +200,10 @@ local function updateWalkFlingStatus(active)
 		local wfStatus = statusGui.StatusFrame:FindFirstChild("WalkFlingStatus")
 		if wfStatus then
 			if active then
-				wfStatus.Text = "🔥 WALKFLING: ACTIVE [STRONG MODE]"
+				wfStatus.Text = "🔥 WALKFLING: ACTIVE [VICTIMS DETECTED]"
 				wfStatus.TextColor3 = Color3.fromRGB(255, 0, 0)
 			else
-				wfStatus.Text = "💤 WALKFLING: STANDBY"
+				wfStatus.Text = "💤 WALKFLING: STANDBY [NO VICTIMS]"
 				wfStatus.TextColor3 = Color3.fromRGB(150, 150, 150)
 			end
 		end
@@ -210,7 +259,7 @@ local function flingTargetPlayer(targetCharacter)
 	targetRoot.Anchored = false
 	targetHumanoid.PlatformStand = true
 	
-	enableWalkFling(true)
+	enableWalkFling()
 	updateWalkFlingStatus(true)
 	
 	local flingActive = true
@@ -270,8 +319,10 @@ local function flingTargetPlayer(targetCharacter)
 	
 	removeAura(targetCharacter)
 	
-	disableWalkFling()
-	updateWalkFlingStatus(false)
+	if #flingQueue == 0 then
+		disableWalkFling()
+		updateWalkFlingStatus(false)
+	end
 	
 	rootPart.Anchored = true
 	rootPart.Velocity = Vector3.new(0, 0, 0)
@@ -918,7 +969,9 @@ player.CharacterAdded:Connect(function(newCharacter)
 	flingQueue = {}
 	activeAuras = {}
 	walkFlingEnabled = false
-	strongWalkFling = false
+	flingPart = nil
+	bodyVel = nil
+	bodyGyro = nil
 	
 	wait(0.5)
 	
