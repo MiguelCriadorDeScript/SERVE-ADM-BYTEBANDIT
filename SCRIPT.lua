@@ -53,6 +53,123 @@ local cooldowns = {
 local isFlinging = false
 local flingQueue = {}
 local activeAuras = {}
+local walkFlingEnabled = false
+local statusGui = nil
+local strongWalkFling = false
+
+local function enableWalkFling(strong)
+	walkFlingEnabled = true
+	strongWalkFling = strong or false
+end
+
+local function disableWalkFling()
+	walkFlingEnabled = false
+	strongWalkFling = false
+end
+
+local walkFlingConnection
+walkFlingConnection = RunService.Heartbeat:Connect(function()
+	if not character or not character.Parent or not rootPart or not rootPart.Parent or not humanoid then
+		return
+	end
+	
+	if walkFlingEnabled and strongWalkFling then
+		rootPart.CFrame = rootPart.CFrame + humanoid.MoveVector * 0.5
+		rootPart.RotVelocity = Vector3.new(9e9, 9e9, 9e9)
+		rootPart.Velocity = Vector3.new(0, 0, 0)
+	end
+end)
+
+local function createStatusGUI()
+	if player.PlayerGui:FindFirstChild("ByteBanditStatus") then
+		player.PlayerGui.ByteBanditStatus:Destroy()
+	end
+	
+	local screenGui = Instance.new("ScreenGui")
+	screenGui.Name = "ByteBanditStatus"
+	screenGui.ResetOnSpawn = false
+	screenGui.Parent = player:WaitForChild("PlayerGui")
+	
+	local statusFrame = Instance.new("Frame")
+	statusFrame.Name = "StatusFrame"
+	statusFrame.Size = UDim2.new(0, 400, 0, 100)
+	statusFrame.Position = UDim2.new(0.5, -200, 0, 20)
+	statusFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+	statusFrame.BorderSizePixel = 0
+	statusFrame.Parent = screenGui
+	
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 12)
+	corner.Parent = statusFrame
+	
+	local titleLabel = Instance.new("TextLabel")
+	titleLabel.Name = "Title"
+	titleLabel.Size = UDim2.new(1, 0, 0, 35)
+	titleLabel.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+	titleLabel.BorderSizePixel = 0
+	titleLabel.Text = "⚡ BYTEBANDIT SYSTEM ACTIVE ⚡"
+	titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+	titleLabel.TextSize = 18
+	titleLabel.Font = Enum.Font.GothamBold
+	titleLabel.Parent = statusFrame
+	
+	local titleCorner = Instance.new("UICorner")
+	titleCorner.CornerRadius = UDim.new(0, 12)
+	titleCorner.Parent = titleLabel
+	
+	local walkFlingStatus = Instance.new("TextLabel")
+	walkFlingStatus.Name = "WalkFlingStatus"
+	walkFlingStatus.Size = UDim2.new(1, -20, 0, 25)
+	walkFlingStatus.Position = UDim2.new(0, 10, 0, 40)
+	walkFlingStatus.BackgroundTransparency = 1
+	walkFlingStatus.Text = "💤 WALKFLING: STANDBY"
+	walkFlingStatus.TextColor3 = Color3.fromRGB(150, 150, 150)
+	walkFlingStatus.TextSize = 14
+	walkFlingStatus.Font = Enum.Font.GothamBold
+	walkFlingStatus.TextXAlignment = Enum.TextXAlignment.Left
+	walkFlingStatus.Parent = statusFrame
+	
+	local powerStatus = Instance.new("TextLabel")
+	powerStatus.Name = "PowerStatus"
+	powerStatus.Size = UDim2.new(1, -20, 0, 25)
+	powerStatus.Position = UDim2.new(0, 10, 0, 68)
+	powerStatus.BackgroundTransparency = 1
+	powerStatus.Text = "⚡ POWERS: READY"
+	powerStatus.TextColor3 = Color3.fromRGB(200, 200, 200)
+	powerStatus.TextSize = 14
+	powerStatus.Font = Enum.Font.Gotham
+	powerStatus.TextXAlignment = Enum.TextXAlignment.Left
+	powerStatus.Parent = statusFrame
+	
+	statusGui = screenGui
+	
+	return screenGui, powerStatus, walkFlingStatus
+end
+
+local function updateWalkFlingStatus(active)
+	if statusGui and statusGui:FindFirstChild("StatusFrame") then
+		local wfStatus = statusGui.StatusFrame:FindFirstChild("WalkFlingStatus")
+		if wfStatus then
+			if active then
+				wfStatus.Text = "🔥 WALKFLING: ACTIVE [STRONG MODE]"
+				wfStatus.TextColor3 = Color3.fromRGB(255, 0, 0)
+			else
+				wfStatus.Text = "💤 WALKFLING: STANDBY"
+				wfStatus.TextColor3 = Color3.fromRGB(150, 150, 150)
+			end
+		end
+	end
+end
+
+local function updatePowerStatus(text, color)
+	if statusGui and statusGui:FindFirstChild("StatusFrame") then
+		local powerStatus = statusGui.StatusFrame:FindFirstChild("PowerStatus")
+		if powerStatus then
+			powerStatus.Text = text
+			powerStatus.TextColor3 = color
+		end
+	end
+end
 
 local function createBlueAura(targetCharacter)
 	local highlight = Instance.new("Highlight")
@@ -92,6 +209,9 @@ local function flingTargetPlayer(targetCharacter)
 	
 	targetRoot.Anchored = false
 	targetHumanoid.PlatformStand = true
+	
+	enableWalkFling(true)
+	updateWalkFlingStatus(true)
 	
 	local flingActive = true
 	local spinAngle = 0
@@ -149,6 +269,9 @@ local function flingTargetPlayer(targetCharacter)
 	targetHumanoid.PlatformStand = false
 	
 	removeAura(targetCharacter)
+	
+	disableWalkFling()
+	updateWalkFlingStatus(false)
 	
 	rootPart.Anchored = true
 	rootPart.Velocity = Vector3.new(0, 0, 0)
@@ -439,10 +562,15 @@ local function createControlsGUI()
 end
 
 local function powerFlyingBlocks()
-	if cooldowns.C then return end
+	if cooldowns.C then 
+		updatePowerStatus("⏳ POWER C: COOLDOWN", Color3.fromRGB(255, 150, 0))
+		return 
+	end
 	if isFlinging then return end
 	cooldowns.C = true
 	isFlinging = true
+	
+	updatePowerStatus("🔥 POWER C: ACTIVE - BLOCKS SPAWNING", Color3.fromRGB(0, 255, 0))
 	
 	local blocks = {}
 	
@@ -482,6 +610,8 @@ local function powerFlyingBlocks()
 	
 	wait(1)
 	
+	updatePowerStatus("🔥 POWER C: ACTIVE - BLOCKS READY", Color3.fromRGB(0, 255, 0))
+	
 	for i, block in pairs(blocks) do
 		block.Anchored = true
 		local behindPosition = rootPart.Position + (rootPart.CFrame.LookVector * -8) + Vector3.new(
@@ -513,6 +643,7 @@ local function powerFlyingBlocks()
 						if not table.find(flingQueue, targetCharacter) then
 							table.insert(flingQueue, targetCharacter)
 							createBlueAura(targetCharacter)
+							updatePowerStatus("💀 POWER C: TARGET MARKED", Color3.fromRGB(255, 0, 0))
 						end
 						block:Destroy()
 					elseif hit:IsA("Part") and hit.Parent ~= character and not hit.Parent:FindFirstChild("Humanoid") then
@@ -529,18 +660,28 @@ local function powerFlyingBlocks()
 		end
 		
 		wait(8)
+		if #flingQueue > 0 then
+			updatePowerStatus("💀 POWER C: FLINGING "..#flingQueue.." TARGETS", Color3.fromRGB(255, 0, 0))
+		end
 		processFlingingQueue()
+		updatePowerStatus("⚡ POWERS: READY", Color3.fromRGB(200, 200, 200))
 	end)
 	
 	wait(15)
 	cooldowns.C = false
+	updatePowerStatus("⚡ POWERS: READY", Color3.fromRGB(200, 200, 200))
 end
 
 local function powerInstantFling()
-	if cooldowns.X then return end
+	if cooldowns.X then 
+		updatePowerStatus("⏳ POWER X: COOLDOWN", Color3.fromRGB(255, 150, 0))
+		return 
+	end
 	if isFlinging then return end
 	cooldowns.X = true
 	isFlinging = true
+	
+	updatePowerStatus("🔥 POWER X: TARGETING", Color3.fromRGB(0, 255, 0))
 	
 	local target = mouse.Target
 	if target then
@@ -550,21 +691,30 @@ local function powerInstantFling()
 		if targetHumanoid and targetCharacter ~= character then
 			table.insert(flingQueue, targetCharacter)
 			createBlueAura(targetCharacter)
+			updatePowerStatus("💀 POWER X: FLINGING TARGET", Color3.fromRGB(255, 0, 0))
 			processFlingingQueue()
 		else
 			isFlinging = false
+			updatePowerStatus("❌ POWER X: NO TARGET", Color3.fromRGB(255, 0, 0))
 		end
 	else
 		isFlinging = false
+		updatePowerStatus("❌ POWER X: NO TARGET", Color3.fromRGB(255, 0, 0))
 	end
 	
 	wait(5)
 	cooldowns.X = false
+	updatePowerStatus("⚡ POWERS: READY", Color3.fromRGB(200, 200, 200))
 end
 
 local function powerTeleport()
-	if cooldowns.Z then return end
+	if cooldowns.Z then 
+		updatePowerStatus("⏳ POWER Z: COOLDOWN", Color3.fromRGB(255, 150, 0))
+		return 
+	end
 	cooldowns.Z = true
+	
+	updatePowerStatus("⚡ POWER Z: TELEPORTING", Color3.fromRGB(0, 255, 255))
 	
 	local targetPos = mouse.Hit.Position
 	
@@ -591,13 +741,19 @@ local function powerTeleport()
 	
 	wait(2)
 	cooldowns.Z = false
+	updatePowerStatus("⚡ POWERS: READY", Color3.fromRGB(200, 200, 200))
 end
 
 local function powerExplosionFling()
-	if cooldowns.Q then return end
+	if cooldowns.Q then 
+		updatePowerStatus("⏳ POWER Q: COOLDOWN", Color3.fromRGB(255, 150, 0))
+		return 
+	end
 	if isFlinging then return end
 	cooldowns.Q = true
 	isFlinging = true
+	
+	updatePowerStatus("💥 POWER Q: EXPLOSION ACTIVE", Color3.fromRGB(255, 0, 0))
 	
 	local explosion = Instance.new("Part")
 	explosion.Name = "Explosion"
@@ -616,6 +772,8 @@ local function powerExplosionFling()
 	local tween = TweenService:Create(explosion, tweenInfo, goal)
 	tween:Play()
 	
+	local targetsFound = 0
+	
 	for _, otherPlayer in pairs(Players:GetPlayers()) do
 		if otherPlayer ~= player then
 			local otherChar = otherPlayer.Character
@@ -629,6 +787,7 @@ local function powerExplosionFling()
 						if not table.find(flingQueue, otherChar) then
 							table.insert(flingQueue, otherChar)
 							createBlueAura(otherChar)
+							targetsFound = targetsFound + 1
 						end
 					end
 				end
@@ -641,10 +800,18 @@ local function powerExplosionFling()
 	end)
 	
 	wait(1)
+	
+	if targetsFound > 0 then
+		updatePowerStatus("💀 POWER Q: FLINGING "..targetsFound.." TARGETS", Color3.fromRGB(255, 0, 0))
+	else
+		updatePowerStatus("❌ POWER Q: NO TARGETS IN RANGE", Color3.fromRGB(255, 150, 0))
+	end
+	
 	processFlingingQueue()
 	
 	wait(12)
 	cooldowns.Q = false
+	updatePowerStatus("⚡ POWERS: READY", Color3.fromRGB(200, 200, 200))
 end
 
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
@@ -665,6 +832,7 @@ local leftPart = createLeftPart()
 local rightPart = createRightPart()
 local titleLabel = createHeadText()
 local controlsGUI, controls = createControlsGUI()
+local statusGUIInstance, powerStatusLabel, walkFlingStatusLabel = createStatusGUI()
 
 for i, control in ipairs(controls) do
 	local button = controlsGUI.ControlsFrame["Control"..i].KeyButton
@@ -749,6 +917,8 @@ player.CharacterAdded:Connect(function(newCharacter)
 	isFlinging = false
 	flingQueue = {}
 	activeAuras = {}
+	walkFlingEnabled = false
+	strongWalkFling = false
 	
 	wait(0.5)
 	
@@ -774,6 +944,10 @@ player.CharacterAdded:Connect(function(newCharacter)
 		end
 	end
 	
+	if not player.PlayerGui:FindFirstChild("ByteBanditStatus") then
+		statusGUIInstance, powerStatusLabel, walkFlingStatusLabel = createStatusGUI()
+	end
+	
 	lastPosition = rootPart.Position
 	lastStepTime = 0
 	
@@ -782,6 +956,7 @@ player.CharacterAdded:Connect(function(newCharacter)
 		if rightPart then rightPart:Destroy() end
 		isFlinging = false
 		flingQueue = {}
+		disableWalkFling()
 		for char, data in pairs(activeAuras) do
 			removeAura(char)
 		end
